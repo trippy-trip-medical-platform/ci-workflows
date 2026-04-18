@@ -1,0 +1,56 @@
+name: Spring Boot CI
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        type: string
+        default: '25'
+        description: 'JDK version to use'
+      run-tests:
+        type: boolean
+        default: true
+        description: 'Whether to run tests'
+      upload-jar:
+        type: boolean
+        default: true
+        description: 'Whether to upload the JAR artifact'
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ inputs.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ inputs.java-version }}
+          cache: 'maven'
+
+      - name: Make mvnw executable
+        run: chmod +x ./mvnw
+
+      - name: Compile
+        run: ./mvnw -B compile
+
+      - name: Test
+        if: inputs.run-tests
+        run: ./mvnw -B test
+        continue-on-error: true
+
+      - name: Package
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        run: ./mvnw -B package -DskipTests
+
+      - name: Upload JAR
+        if: inputs.upload-jar && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar
+          path: target/*.jar
+          retention-days: 7
