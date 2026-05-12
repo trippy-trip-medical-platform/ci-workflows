@@ -35,8 +35,7 @@ jobs:
         run: npx ng build --configuration=${{ inputs.build-config }}
 
       - name: Test
-        run: npx ng test --watch=false --browsers=ChromeHeadless --code-coverage || echo "No tests configured"
-        continue-on-error: true
+        run: npx ng test --watch=false --browsers=ChromeHeadless --code-coverage
 
       - name: Upload build artifact
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
