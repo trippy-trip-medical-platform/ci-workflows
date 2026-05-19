@@ -18,8 +18,8 @@ on:
         description: 'EC2 host IP or domain'
 
 jobs:
-  build-and-test:
-    name: Build & Test
+  build-and-deploy:
+    name: Build & Deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -38,26 +38,6 @@ jobs:
       - name: Build
         run: npx ng build --configuration=${{ inputs.build-config }}
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: dist/
-          retention-days: 7
-
-  deploy:
-    name: Deploy to EC2
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-
-    steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: dist/
-
       - name: Find build output directory
         id: find-dir
         run: |
@@ -70,6 +50,7 @@ jobs:
           ls "$BUILD_DIR" | head -10
 
       - name: Deploy to EC2
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         env:
           SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -78,11 +59,9 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/key.pem
           chmod 600 ~/.ssh/key.pem
 
-          # Upload new frontend
           scp -i ~/.ssh/key.pem -o StrictHostKeyChecking=no -r \
             ${{ steps.find-dir.outputs.dir }} ubuntu@$EC2_HOST:/tmp/frontend-new
 
-          # Swap and restart nginx
           ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no ubuntu@$EC2_HOST \
             "rm -rf /opt/medical-platform/frontend-dist/browser && \
              mv /tmp/frontend-new /opt/medical-platform/frontend-dist/browser && \
