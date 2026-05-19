@@ -3,16 +3,10 @@ name: Docker Build & Push
 on:
   workflow_call:
     inputs:
-      java-version:
-        type: string
-        default: '25'
       image-name:
         type: string
         required: true
         description: 'Docker image name (e.g. medical-lookups)'
-      run-tests:
-        type: boolean
-        default: true
 
 jobs:
   build-and-push:
@@ -27,20 +21,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup JDK ${{ inputs.java-version }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ inputs.java-version }}
-          cache: 'maven'
-
-      - name: Make mvnw executable
-        run: chmod +x ./mvnw
-
-      - name: Test
-        if: inputs.run-tests
-        run: ./mvnw -B test
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
