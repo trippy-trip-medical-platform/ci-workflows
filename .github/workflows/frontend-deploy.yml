@@ -1,0 +1,92 @@
+name: Frontend Build & Deploy
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        default: '22'
+      build-config:
+        type: string
+        default: 'production'
+    secrets:
+      EC2_SSH_KEY:
+        required: true
+        description: 'SSH private key for EC2'
+      EC2_HOST:
+        required: true
+        description: 'EC2 host IP or domain'
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build
+        run: npx ng build --configuration=${{ inputs.build-config }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 7
+
+  deploy:
+    name: Deploy to EC2
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+
+      - name: Find build output directory
+        id: find-dir
+        run: |
+          BUILD_DIR=$(find dist/ -name "browser" -type d | head -1)
+          if [ -z "$BUILD_DIR" ]; then
+            BUILD_DIR=$(find dist/ -name "index.html" -exec dirname {} \; | head -1)
+          fi
+          echo "dir=$BUILD_DIR" >> "$GITHUB_OUTPUT"
+          echo "Found build directory: $BUILD_DIR"
+          ls "$BUILD_DIR" | head -10
+
+      - name: Deploy to EC2
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/key.pem
+          chmod 600 ~/.ssh/key.pem
+
+          # Upload new frontend
+          scp -i ~/.ssh/key.pem -o StrictHostKeyChecking=no -r \
+            ${{ steps.find-dir.outputs.dir }} ubuntu@$EC2_HOST:/tmp/frontend-new
+
+          # Swap and restart nginx
+          ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no ubuntu@$EC2_HOST \
+            "rm -rf /opt/medical-platform/frontend-dist/browser && \
+             mv /tmp/frontend-new /opt/medical-platform/frontend-dist/browser && \
+             docker restart medical-nginx"
+
+          rm -f ~/.ssh/key.pem
+          echo "Frontend deployed successfully!"
