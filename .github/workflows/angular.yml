@@ -38,7 +38,7 @@ jobs:
         run: npx ng test --watch=false --browsers=ChromeHeadless --code-coverage
 
       - name: Upload build artifact
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: false
         uses: actions/upload-artifact@v4
         with:
           name: dist
