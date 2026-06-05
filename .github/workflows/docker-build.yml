@@ -42,3 +42,13 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/${{ inputs.image-name }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Bound GHCR storage: every build leaves a permanent :<sha> image, so prune
+      # to the 5 most recent versions. Never blocks the build (best-effort).
+      - name: Prune old image versions (keep latest 5)
+        continue-on-error: true
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ inputs.image-name }}
+          package-type: container
+          min-versions-to-keep: 5
