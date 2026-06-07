@@ -35,6 +35,35 @@ jobs:
       - name: Make mvnw executable
         run: chmod +x ./mvnw
 
+      - name: Lint — prod must not use ddl-auto=update|create
+        # M2 Flyway rollout finished 2026-06-07 — every service now manages its
+        # schema via Flyway V*__*.sql migrations with Hibernate on ddl-auto=validate.
+        # Reintroducing update/create in any *prod* properties file would silently
+        # bypass Flyway and let Hibernate mutate the schema again. Block it at PR
+        # time so the next person doesn't undo this by accident.
+        #
+        # Allowed:
+        #   - application-dev.properties / application-docker.properties: local DX
+        #   - application-test.properties: usually create-drop, fine
+        #   - application-prod.yml in a service repo IF it forwards to env vars
+        #
+        # Blocked:
+        #   - ddl-auto=update or ddl-auto=create in application-prod.* (any extension)
+        run: |
+          set -e
+          hits=$(find src/main/resources -name 'application-prod.*' \
+                   -exec grep -lE 'ddl-auto[[:space:]]*[:=][[:space:]]*(update|create)([^-]|$)' {} \; 2>/dev/null || true)
+          if [ -n "$hits" ]; then
+            echo "::error::Found ddl-auto=update|create in prod profile — Flyway is supposed to manage schema (see Medical-Platform/Documentation/milestones/M2_FLYWAY_ROLLOUT.md)."
+            echo "Offending files:"
+            for f in $hits; do
+              echo "  --- $f ---"
+              grep -nE 'ddl-auto[[:space:]]*[:=][[:space:]]*(update|create)([^-]|$)' "$f"
+            done
+            exit 1
+          fi
+          echo "✓ no ddl-auto=update|create in prod profile"
+
       - name: Compile
         run: ./mvnw -B compile
 
